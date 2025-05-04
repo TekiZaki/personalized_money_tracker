@@ -1,0 +1,755 @@
+/* App.css */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  /* overflow managed by children now */
+}
+
+/* --- Auth Screen --- */
+.auth-container {
+  flex-grow: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1.5rem;
+  background: linear-gradient(
+    135deg,
+    var(--primary-color) 0%,
+    var(--primary-hover-color) 100%
+  ); /* Optional subtle gradient bg */
+}
+
+.auth {
+  background-color: var(--card-background);
+  padding: 2rem 2.5rem; /* More generous padding */
+  border-radius: var(--border-radius-large);
+  box-shadow: 0 8px 25px var(--shadow-color-medium); /* Softer, larger shadow */
+  width: 100%;
+  max-width: 420px;
+  border: none; /* Remove border, rely on shadow */
+  text-align: center;
+}
+
+.auth h1 {
+  margin-bottom: 2rem; /* More space below title */
+  color: var(--text-color);
+  font-size: 1.75rem;
+  font-weight: 700; /* Bold title */
+}
+
+.auth form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem; /* More space between fields */
+  margin-bottom: 1.5rem;
+}
+
+.auth button[type="submit"] {
+  background-color: var(--primary-color);
+  color: var(--button-text-color);
+  font-weight: 600; /* Bolder button text */
+  padding: 0.8em 1.5em; /* Larger button */
+  font-size: 1rem;
+  margin-top: 0.5rem; /* Space above button */
+}
+
+.auth button[type="submit"]:hover {
+  background-color: var(--primary-hover-color);
+  box-shadow: 0 4px 10px rgba(74, 144, 226, 0.3); /* Specific shadow for primary */
+}
+
+.auth p {
+  margin-top: 2rem;
+  font-size: 0.9rem;
+  color: var(--muted-text-color);
+}
+
+.auth p button {
+  background: none;
+  border: none;
+  color: var(--link-color);
+  text-decoration: underline;
+  padding: 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+.auth p button:hover {
+  color: var(--primary-hover-color);
+  text-decoration: none; /* Remove underline on hover if desired */
+}
+
+.auth-error {
+  margin-bottom: 1rem;
+  padding: 0.8rem 1.2rem;
+  background-color: rgba(220, 53, 69, 0.1);
+  color: var(--error-color);
+  border: 1px solid rgba(220, 53, 69, 0.2);
+  border-radius: var(--border-radius-medium);
+  font-size: 0.9rem;
+}
+
+/* --- Main App View --- */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.8rem 1.5rem; /* Adjusted padding */
+  /* Remove border, use shadow */
+  background-color: var(--card-background);
+  box-shadow: 0 2px 5px var(--shadow-color); /* Subtle shadow */
+  flex-shrink: 0;
+  gap: 1rem;
+  flex-wrap: wrap;
+  position: relative; /* For potential z-index if needed */
+  z-index: 10;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 1.5rem; /* Larger title */
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.header .controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem; /* Increased gap */
+  flex-wrap: wrap;
+}
+
+.theme-toggle,
+.logout-button {
+  background-color: var(--secondary-color);
+  color: var(--button-text-color);
+  border: none;
+  padding: 0.5em 1em; /* Adjusted padding */
+  font-size: 0.9rem;
+  border-radius: var(--border-radius-medium); /* Consistent radius */
+}
+.theme-toggle:hover,
+.logout-button:hover {
+  background-color: var(--secondary-hover-color);
+}
+.logout-button {
+  background-color: var(--expense-color);
+}
+.logout-button:hover {
+  opacity: 0.9; /* Keep subtle opacity change */
+  background-color: var(
+    --expense-color
+  ); /* Prevent color change if it has specific meaning */
+  box-shadow: 0 4px 10px rgba(220, 53, 69, 0.2); /* Red shadow on hover */
+}
+
+.connection-status {
+  font-size: 0.8rem; /* Slightly larger */
+  padding: 0.3rem 0.7rem;
+  border-radius: var(--border-radius-small);
+  font-weight: 600; /* Bolder status */
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.connection-status.online {
+  background-color: var(--income-color);
+  color: white;
+  box-shadow: 0 0 8px rgba(40, 167, 69, 0.4); /* Glow effect */
+}
+
+.connection-status.offline {
+  background-color: var(--secondary-color);
+  color: white;
+}
+
+/* --- Horizontal Layout Container (Desktop Default) --- */
+.main-content {
+  display: flex;
+  flex-grow: 1;
+  overflow: auto; /* Prevent this level from scrolling, children will scroll */
+  padding: 1.5rem; /* More padding around sections */
+  gap: 1.5rem; /* More space between sections */
+  background-color: var(--background-color); /* Ensure background color */
+}
+
+/* --- Sections Styling (Common) --- */
+.form-container,
+.summary-container,
+.transactions {
+  background-color: var(--card-background);
+  border: none; /* Remove border */
+  border-radius: var(--border-radius-large); /* Consistent large radius */
+  padding: 1.5rem; /* Consistent padding */
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 15px var(--shadow-color); /* Consistent shadow */
+  overflow: auto; /* Contain children, allow internal scroll */
+}
+
+/* --- Section Sizing (Desktop Default) --- */
+.form-container {
+  flex: 0 0 420px; /* Slightly wider form */
+  overflow-y: auto; /* Allow scroll if form content exceeds height */
+}
+
+.summary-container {
+  flex: 0 0 280px; /* Slightly wider summary */
+}
+
+.transactions {
+  flex: 1 1 auto; /* Grow and shrink */
+  /* Inner UL will handle scrolling */
+}
+
+/* --- Form Specific Styles --- */
+.form-container h2 {
+  text-align: center;
+  margin-bottom: 1.5rem;
+  font-size: 1.3rem;
+  color: var(--text-color);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.75rem;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem; /* Good gap */
+}
+
+.form-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.form-group {
+  flex: 1;
+  min-width: 130px; /* Adjust as needed */
+}
+
+.form-group.full-width {
+  flex-basis: 100%;
+  min-width: unset;
+}
+
+.form-actions {
+  margin-top: 1.5rem; /* More space above actions */
+  padding-top: 1rem; /* Space within actions */
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.form-actions .button {
+  background-color: var(--primary-color);
+  color: var(--button-text-color);
+  font-size: 0.9rem;
+  padding: 0.6em 1.2em;
+}
+.form-actions .button:hover {
+  background-color: var(--primary-hover-color);
+  box-shadow: 0 4px 10px rgba(74, 144, 226, 0.3);
+}
+
+.form-actions .button.secondary {
+  background-color: var(--secondary-color);
+  color: var(--button-text-color);
+}
+.form-actions .button.secondary:hover {
+  background-color: var(--secondary-hover-color);
+  box-shadow: 0 2px 4px var(--shadow-color); /* Generic shadow for secondary */
+}
+
+/* --- Summary Specific Styles --- */
+.summary-container h3 {
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.75rem;
+  font-size: 1.1rem; /* Slightly larger */
+  font-weight: 600;
+  color: var(--primary-color); /* Use primary color for emphasis */
+}
+.summary-container p {
+  font-size: 0.95rem; /* Readable size */
+  display: flex;
+  justify-content: space-between;
+  align-items: center; /* Align items vertically */
+  margin-bottom: 0.5rem; /* Tighter spacing */
+  padding: 0.25rem 0; /* Add slight vertical padding */
+}
+.summary-container p strong {
+  color: var(--muted-text-color);
+  margin-right: 1rem; /* More space */
+  font-weight: 500;
+}
+.summary-container p span:last-child {
+  font-weight: 600; /* Bolder values */
+}
+
+/* --- Transactions (History) Specific Styles --- */
+.transactions h2 {
+  margin-bottom: 1rem;
+  flex-shrink: 0;
+  font-size: 1.3rem; /* Match form title */
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.75rem;
+}
+
+.tag-filter-container {
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem; /* Increased gap */
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  padding-bottom: 1rem; /* Space below filter */
+  border-bottom: 1px solid var(--border-color); /* Separate from list */
+}
+.tag-filter-container label {
+  margin-bottom: 0;
+  flex-shrink: 0;
+  font-size: 0.85rem; /* Consistent label size */
+  font-weight: 500;
+  color: var(--muted-text-color);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.tag-filter-container select {
+  max-width: 250px; /* Allow more width */
+  flex-grow: 1;
+  font-size: 0.9rem;
+}
+
+.filtered-summary {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 1px dashed var(--border-color); /* Dashed border for distinction */
+  border-radius: var(--border-radius-medium);
+  background-color: var(--background-color); /* Slightly different bg */
+  flex-shrink: 0;
+}
+.filtered-summary h3 {
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+  color: var(--muted-text-color);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.filtered-summary-details {
+  display: flex;
+  gap: 1.5rem; /* More gap */
+  font-size: 0.95rem;
+  flex-wrap: wrap;
+}
+.filtered-summary-details p {
+  margin-bottom: 0;
+}
+.filtered-summary-details strong {
+  margin-right: 0.5rem; /* More space */
+  font-weight: 500;
+  color: var(--muted-text-color);
+}
+.filtered-summary-details span {
+  font-weight: 600; /* Bolder values */
+}
+
+/* --- Transaction List --- */
+.transactions ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  flex-grow: 1;
+  overflow-y: auto; /* Key for scrolling */
+  /* Add some padding to account for scrollbar */
+  padding-right: 10px; /* Match scrollbar width */
+  margin-right: -10px; /* Prevent container width change */
+}
+
+.transaction-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 1rem 0.5rem 1rem 0; /* More vertical padding */
+  border-bottom: 1px solid var(--border-color);
+  gap: 1rem; /* More gap */
+  transition: background-color var(--transition-speed) ease;
+  position: relative; /* For pseudo-element border */
+}
+
+.transaction-item:hover {
+  background-color: rgba(128, 128, 128, 0.05); /* Very subtle hover */
+}
+
+.transaction-item:last-child {
+  border-bottom: none;
+}
+
+/* Use pseudo-element for border to avoid shifting content */
+.transaction-item::before {
+  content: "";
+  position: absolute;
+  left: -1.5rem; /* Align with container padding */
+  top: 0;
+  bottom: 0;
+  width: 5px; /* Thicker border */
+  background-color: transparent;
+  border-radius: 3px 0 0 3px; /* Rounded corner */
+  transition: background-color var(--transition-speed) ease;
+}
+
+.transaction-item.income::before {
+  background-color: var(--income-color);
+}
+
+.transaction-item.expense::before {
+  background-color: var(--expense-color);
+}
+
+/* Adjust padding to account for pseudo-element position */
+.transactions ul {
+  padding-left: 1.5rem; /* Match ::before left offset */
+}
+.transaction-item {
+  padding-left: 0; /* Reset padding-left */
+}
+
+.transaction-details {
+  flex-grow: 1;
+  word-break: break-word;
+}
+
+.transaction-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline; /* Align text baselines */
+  font-weight: 600; /* Bolder title */
+  margin-bottom: 0.3rem;
+  font-size: 1rem; /* Slightly larger */
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem; /* Row and column gap */
+}
+
+.transaction-amount {
+  font-weight: 700; /* Very bold amount */
+  white-space: nowrap;
+  font-size: 1.05rem; /* Slightly emphasize amount */
+}
+
+.transaction-item.income .transaction-amount {
+  color: var(--income-color);
+}
+
+.transaction-item.expense .transaction-amount {
+  color: var(--expense-color);
+}
+
+.transaction-description {
+  font-size: 0.9rem; /* Readable description */
+  color: var(--muted-text-color);
+  margin-bottom: 0.5rem; /* More space below description */
+  line-height: 1.5;
+}
+
+.transaction-tags {
+  margin-top: 0.5rem; /* Space above tags */
+}
+
+.tag {
+  display: inline-block;
+  background-color: var(--tag-background);
+  color: var(--tag-text);
+  font-size: 0.75rem; /* Slightly larger tags */
+  font-weight: 500;
+  padding: 0.25rem 0.6rem; /* More padding */
+  border-radius: var(--border-radius-small);
+  margin-right: 0.4rem;
+  margin-bottom: 0.4rem;
+  border: 1px solid transparent; /* Prep for potential themed borders */
+  transition: background-color var(--transition-speed) ease,
+    color var(--transition-speed) ease;
+}
+/* Optional: Slightly different tag colors based on type? */
+.transaction-item.income .tag {
+  /* background-color: rgba(40, 167, 69, 0.1); */
+  /* border-color: rgba(40, 167, 69, 0.3); */
+  /* color: #1a6e30; */
+}
+/* Dark mode adjustments for optional colored tags would be needed too */
+
+.transaction-actions {
+  display: flex;
+  gap: 0.5rem; /* Increased gap */
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.transaction-actions button {
+  background: none;
+  border: none;
+  padding: 0.3rem;
+  font-size: 1.1rem; /* Slightly larger icons */
+  line-height: 1;
+  color: var(--muted-text-color); /* Muted by default */
+  border-radius: var(--border-radius-small);
+  transition: color var(--transition-speed) ease,
+    background-color var(--transition-speed) ease;
+}
+
+.transaction-actions button:hover {
+  color: var(--text-color);
+  background-color: rgba(128, 128, 128, 0.1); /* Subtle background on hover */
+  transform: none; /* Override base button hover */
+  box-shadow: none; /* Override base button hover */
+}
+.transaction-actions button.delete-btn:hover {
+  color: var(--error-color);
+  background-color: rgba(220, 53, 69, 0.1);
+}
+.transaction-actions button.edit-btn:hover {
+  color: var(--primary-color);
+  background-color: rgba(74, 144, 226, 0.1);
+}
+
+.transaction-item.empty {
+  text-align: center;
+  color: var(--muted-text-color);
+  padding: 3rem 1rem; /* More padding */
+  border: none;
+  font-size: 1rem; /* Larger text */
+  font-style: italic;
+}
+.transaction-item.empty::before {
+  display: none; /* Hide side border for empty state */
+}
+
+/* --- Loading & Error States --- */
+.loading-indicator {
+  text-align: center;
+  padding: 2rem; /* More padding */
+  color: var(--muted-text-color);
+  font-style: italic;
+  font-size: 1rem; /* Larger text */
+  background-color: black;
+}
+
+.error-message {
+  background-color: rgba(220, 53, 69, 0.1);
+  color: var(--error-color);
+  border: 1px solid rgba(220, 53, 69, 0.2);
+  padding: 1rem 1.5rem; /* More padding */
+  border-radius: var(--border-radius-medium);
+  margin: 1rem; /* Consistent margin */
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+.error-message.app-error {
+  /* Keep specific margins if needed, or remove if 1rem default is okay */
+}
+
+/* ========================================================================== */
+/* ========================== RESPONSIVE STYLES ============================= */
+/* ========================================================================== */
+
+@media (max-width: 992px) {
+  /* Adjust breakpoint if needed, e.g., for wider form/summary */
+  /* Maybe allow form/summary to shrink slightly before stacking */
+  .form-container {
+    flex-basis: 360px;
+  }
+  .summary-container {
+    flex-basis: 240px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Tablet and Mobile */
+
+  .main-content {
+    flex-direction: column;
+    overflow-y: auto; /* Allow vertical scroll for the whole content area */
+    overflow-x: auto; /* Prevent horizontal */
+    padding: 1rem; /* Adjust padding */
+    gap: 1rem;
+  }
+
+  .form-container,
+  .summary-container,
+  .transactions {
+    flex-basis: auto;
+    width: 100%;
+    flex-shrink: 0;
+    overflow: visible; /* Let content define height */
+    padding: 1rem; /* Smaller padding inside cards */
+  }
+
+  .form-container {
+    /* Might need scroll again if content is huge */
+    max-height: none; /* Remove max-height unless form is extremely long */
+    overflow-y: visible;
+  }
+
+  .transactions {
+    flex-grow: 0;
+  }
+
+  .transactions ul {
+    max-height: 60vh; /* Generous height, but limited */
+    overflow-y: auto;
+    flex-grow: 0;
+    padding-right: 8px; /* Adjust scroll padding */
+    margin-right: -8px;
+  }
+
+  /* Use padding inside list items */
+  .transaction-item::before {
+    left: -1rem; /* Adjust for container padding */
+  }
+  .transactions ul {
+    padding-left: 1rem; /* Match */
+  }
+
+  .summary-container {
+    order: -1; /* Move summary to top */
+    padding: 1rem;
+  }
+  .summary-container h3 {
+    text-align: center;
+  }
+
+  /* Compact transaction items */
+  .transaction-item {
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+    gap: 0.75rem;
+  }
+  .transaction-title {
+    font-size: 0.95rem;
+  }
+  .transaction-description {
+    font-size: 0.85rem;
+  }
+  .tag {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+  }
+  .transaction-actions button {
+    font-size: 1rem; /* Keep icons readable */
+  }
+}
+
+@media (max-width: 480px) {
+  /* Very Small Screens */
+  html {
+    font-size: 15px; /* Slightly smaller base font */
+  }
+
+  .auth {
+    padding: 1.5rem; /* Less padding */
+  }
+  .auth h1 {
+    font-size: 1.5rem;
+  }
+
+  .header {
+    padding: 0.6rem 1rem;
+  }
+  .header h1 {
+    font-size: 1.25rem;
+  }
+  .header .controls {
+    gap: 0.5rem;
+  }
+  .theme-toggle,
+  .logout-button {
+    padding: 0.4em 0.8em;
+    font-size: 0.85rem;
+  }
+  .connection-status {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.6rem;
+  }
+
+  .main-content {
+    padding: 0.75rem;
+    gap: 0.75rem;
+  }
+
+  .form-container,
+  .summary-container,
+  .transactions {
+    padding: 1rem; /* Keep some padding */
+    border-radius: var(--border-radius-medium); /* Slightly smaller radius */
+  }
+  .form-actions {
+    justify-content: center;
+  }
+  .tag-filter-container {
+    flex-direction: column;
+    align-items: stretch; /* Full width select/label */
+    gap: 0.5rem;
+  }
+  .tag-filter-container select {
+    max-width: 100%;
+  }
+
+  /* Further compact transactions */
+  .transaction-item {
+    padding-top: 0.6rem;
+    padding-bottom: 0.6rem;
+    gap: 0.5rem;
+  }
+  .transaction-item::before {
+    left: -1rem; /* Match container padding */
+    width: 4px; /* Slightly thinner border */
+  }
+  .transactions ul {
+    padding-left: 1rem; /* Match */
+  }
+  .transaction-title {
+    font-size: 0.9rem;
+    gap: 0.25rem 0.5rem; /* Tighter gap */
+  }
+  .transaction-amount {
+    font-size: 0.95rem;
+  }
+  .transaction-description {
+    font-size: 0.8rem;
+    margin-bottom: 0.3rem;
+  }
+  .transaction-tags {
+    margin-top: 0.3rem;
+  }
+  .tag {
+    font-size: 0.65rem;
+    padding: 0.15rem 0.4rem;
+    margin-right: 0.3rem;
+    margin-bottom: 0.3rem;
+  }
+  .transaction-actions button {
+    font-size: 0.95rem; /* Slightly smaller */
+    padding: 0.2rem;
+  }
+  .transaction-actions {
+    gap: 0.3rem;
+  }
+}
+
+.summary-heading {
+  /* Common styles if any */
+}
+
+.summary-heading.light-mode {
+  color: black; /* Or your desired light mode text color */
+}
+
+.summary-heading.dark-mode {
+  color: white; /* The white color for dark mode */
+}
