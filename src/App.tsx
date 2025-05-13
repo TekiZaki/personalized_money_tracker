@@ -1,709 +1,765 @@
-// App.tsx - Komponen utama aplikasi
+// App.tsx
 
-// Impor dependensi yang diperlukan dari React dan file CSS/komponen lokal
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import "./App.css";
-import Login from "./Login"; // Komponen untuk halaman login
-import Register from "./Register"; // Komponen untuk halaman registrasi
+import Login from "./Login";
+import Register from "./Register";
+// Impor fungsi DB
+import {
+  getTransactionsFromDB,
+  saveTransactionsToDB,
+  putTransactionInDB,
+  deleteTransactionFromDB,
+} from "./db"; // Path ke db.ts
 
-// Definisi tipe data untuk objek transaksi
-interface Transaction {
-  id: number; // ID unik transaksi
-  type: "income" | "expense"; // Jenis transaksi: pemasukan atau pengeluaran
-  amount: number; // Jumlah transaksi
-  title?: string | null; // Judul transaksi (opsional)
-  description?: string | null; // Deskripsi transaksi (opsional)
-  tags?: string | null; // Tag transaksi (opsional, dipisahkan koma)
-  created_at?: string; // Timestamp pembuatan (opsional, dari API)
+// Definisikan ulang interface Transaction agar konsisten dan menyertakan user_id
+export interface Transaction {
+  // Ekspor agar bisa diimpor db.ts
+  id: number;
+  user_id: number; // WAJIB ADA untuk indexing di IndexedDB
+  type: "income" | "expense";
+  amount: number;
+  title?: string | null;
+  description?: string | null;
+  tags?: string | null;
+  created_at?: string;
+  // Tambahkan flag untuk transaksi yang dibuat/dimodifikasi offline dan belum disinkronkan
+  // Ini penting untuk implementasi sinkronisasi penuh (tidak dicakup detail di sini)
+  // isOffline?: boolean;
+  // tempId?: string; // Untuk ID sementara jika dibuat offline
 }
 
-// Definisi tipe data untuk tema aplikasi
-type Theme = "light" | "dark"; // Tema terang atau gelap
+// Definisi tipe data (assuming these are the same as the original, or adapt as needed)
+type Theme = "light" | "dark";
 
-// Definisi tipe dasar untuk respons API
 interface ApiBaseResponse {
-  status: "success" | "error"; // Status respons: sukses atau error
-  message?: string; // Pesan tambahan (opsional)
+  status: "success" | "error";
+  message?: string;
 }
 
-// Definisi tipe untuk respons sukses API saat menambah/mengedit transaksi
 interface ApiTransactionSuccessResponse extends ApiBaseResponse {
   status: "success";
-  transaction: Transaction; // Data transaksi yang baru ditambahkan/diedit
+  transaction: Omit<Transaction, "user_id">; // API might not return user_id in transaction object
 }
 
-// Definisi tipe untuk respons sukses API saat data tidak berubah (update)
 interface ApiUpdateUnchangedSuccessResponse extends ApiBaseResponse {
   status: "success";
-  message: "Transaction data unchanged"; // Pesan spesifik jika data tidak berubah
+  message: "Transaction data unchanged";
 }
 
-// Definisi tipe untuk respons sukses API saat login
 interface ApiLoginSuccessResponse extends ApiBaseResponse {
   status: "success";
-  user_id: number; // ID pengguna yang berhasil login
+  user_id: number;
 }
 
-// Definisi tipe untuk respons sukses API sederhana (misal: delete, register)
 interface ApiSimpleSuccessResponse extends ApiBaseResponse {
   status: "success";
-  message: string; // Pesan sukses
+  message: string;
 }
 
-// Tipe gabungan untuk respons API tambah/update
 type AddUpdateApiResponse =
   | ApiTransactionSuccessResponse
-  | ApiUpdateUnchangedSuccessResponse;
-// Tipe gabungan untuk respons API login
+  | ApiUpdateUnchangedSuccessResponse
+  | ApiBaseResponse;
+
 type LoginApiResponse = ApiLoginSuccessResponse | ApiBaseResponse;
-// Tipe gabungan untuk respons API sederhana
 type SimpleApiResponse = ApiSimpleSuccessResponse | ApiBaseResponse;
 
-// Konstanta kunci untuk menyimpan preferensi tema di localStorage
 const THEME_KEY = "themePreference";
-// Konstanta URL endpoint API
 const API_URL = "https://tekizaki.my.id/z_uas_pmt/api.php";
+const MESSAGE_TIMEOUT_MS = 5000;
 
-/**
- * Fungsi helper untuk memformat angka menjadi string dengan pemisah ribuan (titik).
- * @param num Angka yang akan diformat.
- * @returns String angka yang sudah diformat, atau string kosong jika input tidak valid.
- */
+// Utility functions (assuming these are the same or adapt as needed)
 function formatNumber(num: number | null | undefined): string {
-  if (num === null || num === undefined || isNaN(num)) return ""; // Kembalikan string kosong jika null, undefined, atau NaN
-  const numStr = Number(num).toString(); // Konversi ke string
-  // Tambahkan titik sebagai pemisah ribuan
+  if (num === null || num === undefined || isNaN(num)) return "";
+  const numStr = Number(num).toString();
   return numStr.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
 
-/**
- * Fungsi helper untuk mengurai string angka yang diformat (dengan titik) menjadi angka.
- * @param str String angka yang diformat.
- * @returns Angka hasil parse, atau 0 jika string kosong.
- */
 function parseFormattedNumber(str: string): number {
-  if (!str) return 0; // Kembalikan 0 jika string kosong
-  // Hapus semua titik pemisah ribuan dan konversi ke angka
+  if (!str) return 0;
   return Number(str.replace(/\./g, ""));
 }
 
-// Komponen utama aplikasi
 function App() {
-  // State untuk menyimpan daftar transaksi
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  // State untuk input jumlah (sebagai string untuk format)
   const [amount, setAmount] = useState<string>("");
-  // State untuk jenis transaksi (pemasukan/pengeluaran)
   const [type, setType] = useState<"income" | "expense">("income");
-  // State untuk input judul transaksi
   const [title, setTitle] = useState<string>("");
-  // State untuk input deskripsi transaksi
   const [description, setDescription] = useState<string>("");
-  // State untuk input tag transaksi
   const [tags, setTags] = useState<string>("");
-  // State untuk tema aplikasi (light/dark)
   const [theme, setTheme] = useState<Theme>("light");
-  // State untuk status koneksi internet
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
-  // State untuk status login pengguna
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
-  // State untuk menyimpan ID pengguna yang login
   const [userId, setUserId] = useState<number | null>(null);
-  // State untuk menampilkan form registrasi atau login
   const [showRegister, setShowRegister] = useState<boolean>(false);
-  // State untuk status loading (misal saat memanggil API)
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  // State untuk menyimpan pesan error
   const [error, setError] = useState<string | null>(null);
-  // State untuk menyimpan ID transaksi yang sedang diedit
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [editingTransactionId, setEditingTransactionId] = useState<
     number | null
   >(null);
-  // State untuk filter tag yang dipilih
   const [selectedTagFilter, setSelectedTagFilter] = useState<string | null>(
     null
   );
+  const [isSyncing] = useState(false); // Untuk status sinkronisasi (opsional)
 
-  // Menentukan kelas CSS untuk heading ringkasan berdasarkan tema
-  const headingClassName =
-    theme === "dark"
-      ? "summary-heading dark-mode"
-      : "summary-heading light-mode";
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (error || successMessage) {
+      timer = setTimeout(() => {
+        setError(null);
+        setSuccessMessage(null);
+      }, MESSAGE_TIMEOUT_MS);
+    }
+    return () => clearTimeout(timer);
+  }, [error, successMessage]);
 
-  /**
-   * Fungsi generik yang di-memoize untuk melakukan panggilan API.
-   * Mengelola state loading dan error secara otomatis.
-   * @param endpoint URL endpoint API.
-   * @param method Metode HTTP (GET, POST, PUT, DELETE).
-   * @param body Data yang dikirim dalam body request (opsional).
-   * @returns Promise yang resolve dengan data respons API.
-   */
+  const clearMessages = () => {
+    setError(null);
+    setSuccessMessage(null);
+  };
+
   const callApi = useCallback(
-    async <T = ApiBaseResponse,>(
+    async <T extends ApiBaseResponse>(
       endpoint: string,
       method: string,
       body?: any
     ): Promise<T> => {
-      setIsLoading(true); // Mulai loading
-      setError(null); // Hapus error sebelumnya
+      setIsLoading(true);
+      clearMessages();
       try {
         const options: RequestInit = {
           method,
-          headers: {
-            "Content-Type": "application/json", // Set header content type
-          },
+          headers: { "Content-Type": "application/json" },
         };
         if (body) {
-          options.body = JSON.stringify(body); // Tambahkan body jika ada
+          options.body = JSON.stringify(body);
         }
 
-        const response = await fetch(endpoint, options); // Lakukan fetch
+        const response = await fetch(endpoint, options);
+        let responseData: T;
 
-        let responseData: any;
         try {
-          responseData = await response.json(); // Coba parse respons sebagai JSON
+          responseData = await response.json();
         } catch (jsonError) {
-          // Jika gagal parse JSON dan status tidak OK, lempar error HTTP
           if (!response.ok) {
             throw new Error(
               `HTTP error ${response.status}: ${response.statusText}. Non-JSON response.`
             );
           }
-          // Jika status OK tapi JSON tidak valid (jarang terjadi), anggap error
           responseData = {
             status: "error",
             message: "Invalid JSON response from server",
-          };
+          } as T;
         }
 
-        // Jika respons tidak OK (status code bukan 2xx), lempar error
-        if (!response.ok) {
+        if (!response.ok || responseData.status === "error") {
           throw new Error(
-            responseData?.message || // Gunakan pesan error dari API jika ada
-              `Request failed with status ${response.status}` // Pesan default
+            responseData?.message ||
+              `Request failed with status ${response.status}`
+          );
+        }
+        return responseData;
+      } catch (err: any) {
+        console.error(`API call error (${method} ${endpoint}):`, err);
+        const errorMessage =
+          err.message || "An unexpected network error occurred.";
+        setError(errorMessage);
+        throw err;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    []
+  );
+
+  const fetchTransactionsDirectly = useCallback(
+    async (currentUserId: number): Promise<Transaction[]> => {
+      setIsLoading(true);
+      clearMessages();
+      const endpoint = `${API_URL}?user_id=${currentUserId}`;
+      try {
+        const response = await fetch(endpoint, { method: "GET" });
+        let responseData: any;
+        try {
+          responseData = await response.json();
+        } catch (jsonError) {
+          if (!response.ok) {
+            throw new Error(
+              `HTTP error ${response.status}: ${response.statusText}. Non-JSON response.`
+            );
+          }
+          throw new Error(
+            "Invalid JSON response received from server despite OK status."
           );
         }
 
-        return responseData as T; // Kembalikan data respons
-      } catch (err: any) {
-        console.error(`API call error (${method} ${endpoint}):`, err); // Log error ke console
-        const errorMessage =
-          err.message || "An unexpected network error occurred."; // Tentukan pesan error
-        setError(errorMessage); // Set state error
-        throw err; // Lempar kembali error untuk ditangani di pemanggil
-      } finally {
-        setIsLoading(false); // Selesai loading, baik sukses maupun gagal
-      }
-    },
-    [] // Dependency array kosong agar fungsi callApi tidak dibuat ulang setiap render
-  );
+        if (!response.ok) {
+          const errorMessage =
+            responseData?.message ||
+            response.statusText ||
+            `Request failed with status ${response.status}`;
+          throw new Error(errorMessage);
+        }
 
-  /**
-   * Fungsi yang di-memoize untuk mengambil data transaksi dari API berdasarkan user ID.
-   * @param currentUserId ID pengguna yang transaksinya akan diambil.
-   */
-  const fetchTransactions = useCallback(
-    async (currentUserId: number) => {
-      if (!currentUserId) return; // Jangan lakukan fetch jika user ID tidak ada
-      try {
-        // Panggil API untuk mendapatkan transaksi
-        const data = await callApi<Transaction[]>(
-          `${API_URL}?user_id=${currentUserId}`, // Endpoint GET transaksi
-          "GET"
-        );
-
-        // Pastikan data yang diterima adalah array
-        if (Array.isArray(data)) {
-          // Format data transaksi (konversi ID dan amount ke number, handle nullish values)
-          const formattedTransactions = data.map((tx) => ({
-            ...tx,
-            id: Number(tx.id),
-            amount: Number(tx.amount),
-            title: tx.title ?? null, // Gunakan null jika title tidak ada
-            description: tx.description ?? null, // Gunakan null jika description tidak ada
-            tags: tx.tags ?? null, // Gunakan null jika tags tidak ada
-          }));
-          setTransactions(formattedTransactions); // Update state transaksi
-        } else {
-          // Jika data bukan array, log error dan set transaksi ke array kosong
-          console.error("Received non-array data for transactions:", data);
-          setTransactions([]);
-          setError(
+        if (!Array.isArray(responseData)) {
+          console.error(
+            "Received non-array data for transactions:",
+            responseData
+          );
+          throw new Error(
             "Failed to load transactions: Invalid data format received."
           );
         }
-      } catch (err) {
-        // Jika terjadi error saat fetch, set transaksi ke array kosong
-        setTransactions([]);
-        // Error sudah di-set oleh callApi
+
+        const formattedTransactions = responseData.map((tx: any) => ({
+          id: Number(tx.id),
+          user_id: currentUserId, // Ensure user_id is part of the transaction object
+          type: tx.type,
+          amount: Number(tx.amount),
+          title: tx.title ?? null,
+          description: tx.description ?? null,
+          tags: tx.tags ?? null,
+          created_at: tx.created_at,
+        }));
+        return formattedTransactions as Transaction[];
+      } catch (err: any) {
+        console.error(`API call error (GET ${endpoint}):`, err);
+        setError(err.message || "Failed to fetch transactions.");
+        throw err;
+      } finally {
+        setIsLoading(false);
       }
     },
-    [callApi] // Bergantung pada fungsi callApi
+    []
   );
 
-  // Efek samping yang dijalankan saat komponen pertama kali dimuat dan saat fetchTransactions berubah
-  useEffect(() => {
-    // 1. Cek status login dari localStorage
-    const storedUserId = localStorage.getItem("userId");
-    if (storedUserId) {
-      const parsedUserId = parseInt(storedUserId, 10);
-      if (!isNaN(parsedUserId)) {
-        // Jika ada user ID valid di localStorage
-        setIsLoggedIn(true); // Set status login
-        setUserId(parsedUserId); // Set user ID
-        fetchTransactions(parsedUserId); // Ambil data transaksi pengguna
+  const fetchTransactions = useCallback(
+    async (currentUserId: number) => {
+      if (!currentUserId) return;
+      clearMessages();
+
+      if (isOnline) {
+        try {
+          setIsLoading(true);
+          const onlineTransactions = await fetchTransactionsDirectly(
+            currentUserId
+          );
+          setTransactions(onlineTransactions);
+          await saveTransactionsToDB(onlineTransactions, currentUserId);
+          console.log("Transactions fetched from API and saved to DB.");
+        } catch (err: any) {
+          setError(
+            `Failed to fetch from server: ${err.message}. Trying local data...`
+          );
+          try {
+            const localTransactions = await getTransactionsFromDB(
+              currentUserId
+            );
+            if (localTransactions.length > 0) {
+              setTransactions(localTransactions);
+              setSuccessMessage("Displaying locally cached transactions.");
+            } else {
+              setError(
+                `Failed to fetch from server and no local data for user ${currentUserId}.`
+              );
+              setTransactions([]);
+            }
+          } catch (dbError: any) {
+            setError(`Failed to fetch from server and DB: ${dbError.message}`);
+            setTransactions([]);
+          }
+        } finally {
+          setIsLoading(false);
+        }
       } else {
-        // Jika user ID tidak valid, hapus dari localStorage
-        localStorage.removeItem("userId");
-        setIsLoggedIn(false);
-        setUserId(null);
+        setIsLoading(true);
+        setError("You are offline. Displaying locally stored data.");
+        try {
+          const localTransactions = await getTransactionsFromDB(currentUserId);
+          setTransactions(localTransactions);
+          if (localTransactions.length === 0) {
+            setSuccessMessage(
+              "No local transactions found for offline display."
+            );
+          }
+        } catch (dbError: any) {
+          setError(`Error fetching local data: ${dbError.message}`);
+          setTransactions([]);
+        } finally {
+          setIsLoading(false);
+        }
       }
-    } else {
-      // Jika tidak ada user ID di localStorage
-      setIsLoggedIn(false);
-      setUserId(null);
+    },
+    [
+      isOnline,
+      fetchTransactionsDirectly,
+      saveTransactionsToDB,
+      getTransactionsFromDB,
+    ] // Added DB functions to deps
+  );
+
+  useEffect(() => {
+    const storedUserId = localStorage.getItem("userId");
+    let parsedUserIdFromStorage: number | null = null;
+
+    if (storedUserId) {
+      const parsed = parseInt(storedUserId, 10);
+      if (!isNaN(parsed)) {
+        parsedUserIdFromStorage = parsed;
+        setIsLoggedIn(true);
+        setUserId(parsed);
+      } else {
+        localStorage.removeItem("userId");
+      }
     }
 
-    // 2. Registrasi Service Worker (jika didukung browser)
     if ("serviceWorker" in navigator) {
+      const swUrl = `${import.meta.env.BASE_URL || "/"}service-worker.js`;
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/service-worker.js").then(
-          (registration) => console.log("SW registered:", registration.scope),
-          (error) => console.error("SW registration failed:", error)
-        );
+        navigator.serviceWorker
+          .register(swUrl)
+          .then((registration) =>
+            console.log("SW registered:", registration.scope)
+          )
+          .catch((error) => console.error("SW registration failed:", error));
       });
     }
 
-    // 3. Muat preferensi tema dari localStorage atau deteksi preferensi sistem
     const savedTheme = localStorage.getItem(THEME_KEY) as Theme | null;
-    const initialTheme =
-      savedTheme || // Gunakan tema tersimpan jika ada
-      (window.matchMedia("(prefers-color-scheme: light)").matches // Cek preferensi sistem
-        ? "light"
-        : "dark");
-    setTheme(initialTheme); // Set state tema
-    document.documentElement.setAttribute("data-theme", initialTheme); // Set atribut data-theme di HTML
+    const prefersDark = window.matchMedia(
+      "(prefers-color-scheme: dark)"
+    ).matches;
+    const initialTheme = savedTheme || (prefersDark ? "dark" : "light");
+    setTheme(initialTheme);
+    document.documentElement.setAttribute("data-theme", initialTheme);
 
-    // 4. Setup listener untuk status online/offline
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-
-    // 5. Cleanup function: hapus listener saat komponen di-unmount
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
+    const handleOnlineStatus = () => {
+      setIsOnline(true);
+      setSuccessMessage("You are back online!");
+      if (userId) {
+        // Use component's userId state which should be set
+        fetchTransactions(userId);
+      }
     };
-  }, [fetchTransactions]); // Bergantung pada fetchTransactions
+    const handleOfflineStatus = () => {
+      setIsOnline(false);
+      setError("You are currently offline. Some features might be limited.");
+    };
 
-  /**
-   * Handler untuk perubahan input amount.
-   * Memformat input secara otomatis dengan pemisah ribuan.
-   * @param e Event perubahan dari input element.
-   */
+    window.addEventListener("online", handleOnlineStatus);
+    window.addEventListener("offline", handleOfflineStatus);
+
+    // Initial fetch if user ID was loaded from storage
+    if (parsedUserIdFromStorage) {
+      fetchTransactions(parsedUserIdFromStorage);
+    }
+
+    return () => {
+      window.removeEventListener("online", handleOnlineStatus);
+      window.removeEventListener("offline", handleOfflineStatus);
+    };
+  }, [fetchTransactions]); // userId is managed by state, fetchTransactions is the key dependency
+
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawValue = e.target.value.replace(/\./g, ""); // Hapus titik pemisah
-    // Hanya izinkan angka atau string kosong
+    const rawValue = e.target.value.replace(/\./g, "");
     if (rawValue === "" || /^[0-9]+$/.test(rawValue)) {
-      const numValue = Number(rawValue); // Konversi ke angka
-      // Set state amount dengan nilai yang diformat, atau string kosong
+      const numValue = Number(rawValue);
       setAmount(rawValue === "" ? "" : formatNumber(numValue));
     }
   };
 
-  /**
-   * Fungsi untuk membersihkan form input transaksi.
-   * Mengembalikan state form ke nilai default dan menghapus ID edit.
-   */
-  const clearForm = () => {
+  const clearForm = useCallback(() => {
     setAmount("");
     setType("income");
     setTitle("");
     setDescription("");
     setTags("");
-    setEditingTransactionId(null); // Hapus status edit
-  };
+    setEditingTransactionId(null);
+  }, []);
 
-  /**
-   * Handler untuk menambah atau mengupdate transaksi.
-   * Mengirim data ke API menggunakan metode POST (tambah) atau PUT (update).
-   */
   const handleAddOrUpdateTransaction = async () => {
-    // Validasi: Pastikan pengguna sudah login
     if (!userId) {
       setError("Cannot save transaction: User not logged in.");
       return;
     }
-    // Validasi: Pastikan amount valid
     const parsedAmount = parseFormattedNumber(amount);
     if (amount === "" || isNaN(parsedAmount) || parsedAmount <= 0) {
       setError("Please enter a valid, positive amount for the transaction.");
       return;
     }
-    setError(null); // Hapus error jika validasi lolos
+    clearMessages();
 
-    // Siapkan payload data transaksi untuk dikirim ke API
-    const transactionPayload = {
+    // Base transaction data, ID and created_at will be set later
+    const baseTransactionData = {
       user_id: userId,
       type: type,
       amount: parsedAmount,
-      title: title.trim() || null, // Kirim null jika kosong setelah trim
-      description: description.trim() || null, // Kirim null jika kosong setelah trim
+      title: title.trim() || null,
+      description: description.trim() || null,
       tags:
         tags
-          .split(",") // Pisahkan tag berdasarkan koma
-          .map((t) => t.trim()) // Hapus spasi di awal/akhir tiap tag
-          .filter(Boolean) // Hapus tag kosong
-          .join(",") || null, // Gabungkan kembali dengan koma, kirim null jika tidak ada tag
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean)
+          .join(",") || null,
     };
 
-    try {
-      let resultData: AddUpdateApiResponse;
-
-      // Jika sedang dalam mode edit (editingTransactionId tidak null)
-      if (editingTransactionId !== null) {
-        // Panggil API dengan metode PUT untuk update
-        resultData = await callApi<AddUpdateApiResponse>(API_URL, "PUT", {
-          ...transactionPayload,
-          transaction_id: editingTransactionId, // Sertakan ID transaksi yang diedit
-        });
-
-        if (resultData.status === "success") {
-          // Jika update berhasil dan API mengembalikan data transaksi baru
-          if ("transaction" in resultData) {
-            const updatedTx = {
-              ...resultData.transaction,
-              id: Number(resultData.transaction.id), // Pastikan ID adalah number
-              amount: Number(resultData.transaction.amount), // Pastikan amount adalah number
-            };
-            // Update state transactions: ganti transaksi lama dengan yang baru
-            setTransactions((prev) =>
-              prev.map((tx) =>
-                tx.id === editingTransactionId ? updatedTx : tx
-              )
-            );
-            console.log("Transaction updated successfully:", updatedTx.id);
-          } else if (resultData.message === "Transaction data unchanged") {
-            // Jika data tidak berubah, cukup log pesan
-            console.log("Transaction data was unchanged.");
+    if (isOnline) {
+      try {
+        setIsLoading(true);
+        let resultData: AddUpdateApiResponse;
+        if (editingTransactionId !== null) {
+          // Updating existing transaction online
+          resultData = await callApi<AddUpdateApiResponse>(API_URL, "PUT", {
+            ...baseTransactionData,
+            transaction_id: editingTransactionId,
+          });
+          if (resultData.status === "success") {
+            if ("transaction" in resultData && resultData.transaction) {
+              const updatedTxApi: Transaction = {
+                ...resultData.transaction, // API response
+                id: Number(resultData.transaction.id), // Ensure ID is number
+                amount: Number(resultData.transaction.amount), // Ensure amount is number
+                user_id: userId, // Ensure user_id is present
+              };
+              setTransactions((prev) =>
+                prev.map((tx) =>
+                  tx.id === editingTransactionId ? updatedTxApi : tx
+                )
+              );
+              await putTransactionInDB(updatedTxApi);
+              setSuccessMessage("Transaction updated successfully!");
+            } else if (resultData.message === "Transaction data unchanged") {
+              setSuccessMessage("Transaction data was unchanged.");
+            } else {
+              setSuccessMessage(resultData.message || "Transaction updated.");
+            }
+            clearForm();
           }
-          clearForm(); // Bersihkan form setelah berhasil update
+        } else {
+          // Adding new transaction online
+          resultData = await callApi<AddUpdateApiResponse>(API_URL, "POST", {
+            action: "add_transaction",
+            ...baseTransactionData,
+          });
+          if (
+            resultData.status === "success" &&
+            "transaction" in resultData &&
+            resultData.transaction
+          ) {
+            const newTxApi: Transaction = {
+              ...resultData.transaction,
+              id: Number(resultData.transaction.id),
+              amount: Number(resultData.transaction.amount),
+              user_id: userId,
+            };
+            setTransactions((prev) => [newTxApi, ...prev]);
+            await putTransactionInDB(newTxApi);
+            setSuccessMessage("Transaction added successfully!");
+            clearForm();
+          }
         }
-        // Jika resultData.status === 'error', error sudah ditangani oleh callApi
-      } else {
-        // Jika bukan mode edit (menambah transaksi baru)
-        // Panggil API dengan metode POST untuk menambah
-        resultData = await callApi<ApiTransactionSuccessResponse>(
-          API_URL,
-          "POST",
-          { action: "add_transaction", ...transactionPayload } // Sertakan action 'add_transaction'
-        );
-
-        // Jika penambahan berhasil dan API mengembalikan data transaksi baru
-        if (resultData.status === "success" && resultData.transaction) {
-          const newTransaction = {
-            ...resultData.transaction,
-            id: Number(resultData.transaction.id), // Pastikan ID adalah number
-            amount: Number(resultData.transaction.amount), // Pastikan amount adalah number
-          };
-          // Tambahkan transaksi baru ke awal state transactions
-          setTransactions((prev) => [newTransaction, ...prev]);
-          console.log("Transaction added successfully:", newTransaction.id);
-          clearForm(); // Bersihkan form setelah berhasil menambah
-        }
-        // Jika resultData.status === 'error', error sudah ditangani oleh callApi
+      } catch (err: any) {
+        //setError(`Operation failed online: ${err.message}. Data not saved.`); // callApi already sets error
+      } finally {
+        setIsLoading(false);
       }
-    } catch (err) {
-      // Tangani error yang mungkin dilempar oleh callApi atau validasi sebelumnya
-      // Tampilkan alert dengan pesan error yang sudah di-set oleh callApi atau pesan default
-      alert(
-        `Operation failed: ${
-          error || "Please check the details and try again."
-        }`
+    } else {
+      // OFFLINE
+      setError(
+        "You are offline. This action will be processed locally and synced when online."
       );
+      setIsLoading(true); // Simulate loading for local op
+      try {
+        if (editingTransactionId !== null) {
+          const optimisticUpdate: Transaction = {
+            ...baseTransactionData,
+            id: editingTransactionId, // Keep existing ID
+            created_at:
+              transactions.find((tx) => tx.id === editingTransactionId)
+                ?.created_at || new Date().toISOString(), // Keep original created_at or new if not found
+            // isOffline: true, // Flag for sync mechanism
+          };
+          setTransactions((prev) =>
+            prev.map((tx) =>
+              tx.id === editingTransactionId ? optimisticUpdate : tx
+            )
+          );
+          await putTransactionInDB(optimisticUpdate);
+          setSuccessMessage("Transaction updated locally (offline).");
+        } else {
+          const tempId = Date.now(); // Temporary ID for offline creation
+          const optimisticNew: Transaction = {
+            ...baseTransactionData,
+            id: tempId, // Use temporary ID
+            created_at: new Date().toISOString(),
+            // isOffline: true, // Flag for sync mechanism
+            // tempId: `offline_${tempId}` // Store tempId for sync resolution
+          };
+          setTransactions((prev) => [optimisticNew, ...prev]);
+          await putTransactionInDB(optimisticNew); // This will use tempId as primary key in DB
+          setSuccessMessage("Transaction added locally (offline).");
+        }
+        clearForm();
+      } catch (dbError: any) {
+        setError(`Failed to save locally: ${dbError.message}`);
+      } finally {
+        setIsLoading(false);
+      }
+      // PENTING: Requires a robust sync mechanism to handle tempId resolution
+      // and push changes to server when back online.
     }
   };
 
-  /**
-   * Handler untuk memulai mode edit transaksi.
-   * Mengisi form dengan data transaksi yang dipilih dan scroll ke form.
-   * @param transaction Objek transaksi yang akan diedit.
-   */
   const handleEditTransaction = (transaction: Transaction) => {
-    setEditingTransactionId(transaction.id); // Set ID transaksi yang diedit
-    // Isi state form dengan data dari transaksi yang dipilih
+    setEditingTransactionId(transaction.id);
     setAmount(formatNumber(transaction.amount));
     setType(transaction.type);
     setTitle(transaction.title || "");
     setDescription(transaction.description || "");
     setTags(transaction.tags || "");
-    setError(null); // Hapus pesan error sebelumnya
-    // Scroll ke elemen form agar terlihat
+    clearMessages();
     const formElement = document.querySelector(".form-container");
     formElement?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  /**
-   * Handler untuk menghapus transaksi.
-   * Meminta konfirmasi pengguna sebelum menghapus.
-   * @param transactionId ID transaksi yang akan dihapus.
-   */
   const handleDeleteTransaction = async (transactionId: number) => {
-    // Validasi: Pastikan pengguna sudah login
     if (!userId) {
       setError("Cannot delete: User not logged in.");
       return;
     }
+    clearMessages();
 
-    // Minta konfirmasi pengguna
     if (
       window.confirm(
         `Are you sure you want to permanently delete transaction ID ${transactionId}?`
       )
     ) {
-      try {
-        // Panggil API dengan metode DELETE
-        await callApi<ApiSimpleSuccessResponse>(
-          `${API_URL}?user_id=${userId}&transaction_id=${transactionId}`, // Endpoint DELETE
-          "DELETE"
-        );
-
-        // Hapus transaksi dari state transactions
-        setTransactions(transactions.filter((tx) => tx.id !== transactionId));
-        console.log("Transaction deleted successfully:", transactionId);
-
-        // Jika transaksi yang dihapus adalah yang sedang diedit, bersihkan form
-        if (editingTransactionId === transactionId) {
-          clearForm();
+      if (isOnline) {
+        setIsLoading(true);
+        try {
+          const result = await callApi<SimpleApiResponse>(
+            `${API_URL}?user_id=${userId}&transaction_id=${transactionId}`,
+            "DELETE"
+          );
+          if (result.status === "success") {
+            setTransactions((prev) =>
+              prev.filter((tx) => tx.id !== transactionId)
+            );
+            await deleteTransactionFromDB(transactionId);
+            setSuccessMessage(
+              result.message || "Transaction deleted successfully!"
+            );
+            if (editingTransactionId === transactionId) clearForm();
+          }
+        } catch (err: any) {
+          // setError handled by callApi
+        } finally {
+          setIsLoading(false);
         }
-      } catch (err) {
-        // Tangani error dari callApi
-        alert(
-          `Failed to delete transaction: ${
-            error || "An unknown error occurred."
-          }`
+      } else {
+        // OFFLINE
+        setError(
+          "You are offline. Transaction will be deleted locally and synced when online."
         );
+        setIsLoading(true);
+        try {
+          setTransactions((prev) =>
+            prev.filter((tx) => tx.id !== transactionId)
+          );
+          await deleteTransactionFromDB(transactionId); // This assumes transactionId is the correct ID in DB
+          setSuccessMessage("Transaction deleted locally (offline).");
+          if (editingTransactionId === transactionId) clearForm();
+          // PENTING: Requires sync mechanism to tell server about this deletion.
+        } catch (dbError: any) {
+          setError(`Failed to delete locally: ${dbError.message}`);
+        } finally {
+          setIsLoading(false);
+        }
       }
     }
   };
 
-  /**
-   * Handler untuk mengganti tema aplikasi (light/dark).
-   * Menyimpan preferensi tema ke localStorage.
-   */
   const toggleTheme = () => {
-    const newTheme: Theme = theme === "light" ? "dark" : "light"; // Tentukan tema baru
-    setTheme(newTheme); // Update state tema
-    document.documentElement.setAttribute("data-theme", newTheme); // Update atribut di HTML
-    localStorage.setItem(THEME_KEY, newTheme); // Simpan preferensi ke localStorage
+    const newTheme: Theme = theme === "light" ? "dark" : "light";
+    setTheme(newTheme);
+    document.documentElement.setAttribute("data-theme", newTheme);
+    localStorage.setItem(THEME_KEY, newTheme);
   };
 
-  /**
-   * Handler untuk proses login pengguna.
-   * @param username Username pengguna.
-   * @param password Password pengguna.
-   */
   const handleLogin = async (username: string, password: string) => {
+    clearMessages();
     try {
-      // Panggil API untuk login
       const data = await callApi<LoginApiResponse>(API_URL, "POST", {
-        action: "login", // Sertakan action 'login'
+        action: "login",
         username,
         password,
       });
 
-      // Jika login sukses dan API mengembalikan user_id
       if (data.status === "success" && "user_id" in data) {
-        setIsLoggedIn(true); // Set status login
-        setUserId(data.user_id); // Set user ID
-        localStorage.setItem("userId", data.user_id.toString()); // Simpan user ID ke localStorage
-        fetchTransactions(data.user_id); // Ambil data transaksi pengguna
-        setShowRegister(false); // Sembunyikan form registrasi (jika terbuka)
-        clearForm(); // Bersihkan form transaksi
-        setError(null); // Hapus pesan error
-        setSelectedTagFilter(null); // Reset filter tag
+        setIsLoggedIn(true);
+        const newUserId = data.user_id;
+        setUserId(newUserId);
+        localStorage.setItem("userId", newUserId.toString());
+        fetchTransactions(newUserId); // Fetch transactions for the logged-in user
+        setShowRegister(false);
+        clearForm();
+        setSelectedTagFilter(null);
+        // setSuccessMessage("Login successful!"); // Optional
       } else {
-        // Jika status bukan success atau tidak ada user_id
-        throw new Error(
-          data.message || "Login failed: Invalid response from server."
-        );
+        // setError(data.message || "Login failed: Invalid response from server."); // Handled by callApi
       }
-    } catch (err: any) {
-      // Tangani error dari callApi atau validasi respons
-      // Tampilkan alert dengan pesan error yang sudah di-set oleh callApi atau pesan default
-      alert(`Login failed: ${error || "Please check credentials."}`);
+    } catch (err) {
+      // Error already set by callApi
     }
   };
 
-  /**
-   * Handler untuk proses registrasi pengguna baru.
-   * @param username Username baru.
-   * @param password Password baru.
-   */
   const handleRegister = async (username: string, password: string) => {
+    clearMessages();
     try {
-      // Panggil API untuk registrasi
       const data = await callApi<SimpleApiResponse>(API_URL, "POST", {
-        action: "register", // Sertakan action 'register'
+        action: "register",
         username,
         password,
       });
 
-      // Jika registrasi sukses
       if (data.status === "success") {
-        alert(data.message || "Registration successful! Please login."); // Tampilkan pesan sukses
-        setShowRegister(false); // Kembali ke tampilan login
-        setError(null); // Hapus pesan error
-      } else {
-        // Jika status bukan success
-        throw new Error(
-          data.message || "Registration failed: Invalid response."
+        setSuccessMessage(
+          data.message || "Registration successful! Please login."
         );
+        setShowRegister(false);
+      } else {
+        // setError(data.message || "Registration failed: Invalid response."); // Handled by callApi
       }
-    } catch (err: any) {
-      // Tangani error dari callApi atau validasi respons
-      // Tampilkan alert dengan pesan error yang sudah di-set oleh callApi atau pesan default
-      alert(`Registration failed: ${error || "Username might be taken."}`);
+    } catch (err) {
+      // Error already set by callApi
     }
   };
 
-  /**
-   * Handler untuk proses logout pengguna.
-   * Menghapus data sesi dari localStorage dan mereset state aplikasi.
-   */
   const handleLogout = () => {
-    localStorage.removeItem("userId"); // Hapus user ID dari localStorage
-    // Reset state ke kondisi awal (belum login)
+    localStorage.removeItem("userId");
     setIsLoggedIn(false);
     setUserId(null);
     setTransactions([]);
     clearForm();
-    setError(null);
+    clearMessages();
     setSelectedTagFilter(null);
+    // setSuccessMessage("Logged out successfully."); // Optional
   };
 
-  // Memoized value: Daftar tag unik dari semua transaksi
   const uniqueTags = useMemo(() => {
-    const allTags = new Set<string>(); // Gunakan Set untuk otomatis menangani duplikat
+    const allTags = new Set<string>();
     transactions.forEach((tx) => {
       if (tx.tags) {
         tx.tags
-          .split(",") // Pisahkan string tags
-          .map((tag) => tag.trim()) // Trim spasi
-          .filter(Boolean) // Hapus tag kosong
-          .forEach((tag) => allTags.add(tag)); // Tambahkan ke Set
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean)
+          .forEach((tag) => allTags.add(tag));
       }
     });
-    return Array.from(allTags).sort(); // Konversi Set ke Array dan urutkan
-  }, [transactions]); // Hitung ulang hanya jika transactions berubah
+    return Array.from(allTags).sort();
+  }, [transactions]);
 
-  // Memoized value: Daftar transaksi yang sudah difilter berdasarkan tag terpilih
   const filteredTransactions = useMemo(() => {
-    if (!selectedTagFilter) {
-      return transactions; // Jika tidak ada filter, kembalikan semua transaksi
-    }
-    // Filter transaksi yang memiliki tag yang cocok dengan selectedTagFilter
+    if (!selectedTagFilter) return transactions;
     return transactions.filter(
       (tx) =>
-        tx.tags && // Pastikan transaksi punya tags
+        tx.tags &&
         tx.tags
           .split(",")
-          .map((t) => t.trim()) // Proses tags seperti biasa
-          .includes(selectedTagFilter) // Cek apakah tag yang dipilih ada di dalamnya
+          .map((t) => t.trim())
+          .includes(selectedTagFilter)
     );
-  }, [transactions, selectedTagFilter]); // Hitung ulang jika transactions atau selectedTagFilter berubah
+  }, [transactions, selectedTagFilter]);
 
-  // Memoized value: Total pemasukan, pengeluaran, dan saldo keseluruhan
   const { totalIncome, totalExpenses, totalBalance } = useMemo(() => {
     const income = transactions.reduce(
-      (acc, curr) => acc + (curr.type === "income" ? curr.amount : 0), // Akumulasi amount jika type 'income'
+      (acc, curr) => acc + (curr.type === "income" ? curr.amount : 0),
       0
     );
     const expenses = transactions.reduce(
-      (acc, curr) => acc + (curr.type === "expense" ? curr.amount : 0), // Akumulasi amount jika type 'expense'
+      (acc, curr) => acc + (curr.type === "expense" ? curr.amount : 0),
       0
     );
     return {
       totalIncome: income,
       totalExpenses: expenses,
-      totalBalance: income - expenses, // Hitung saldo
+      totalBalance: income - expenses,
     };
-  }, [transactions]); // Hitung ulang hanya jika transactions berubah
+  }, [transactions]);
 
-  // Memoized value: Ringkasan pemasukan dan pengeluaran untuk transaksi yang difilter
   const filteredSummary = useMemo(() => {
-    // Jika tidak ada filter, kembalikan nol (meskipun tidak ditampilkan)
-    if (!selectedTagFilter) {
-      return { income: 0, expenses: 0 };
-    }
-    // Hitung total income dari filteredTransactions
+    if (!selectedTagFilter) return { income: 0, expenses: 0 }; // Default to 0 if no filter
     const income = filteredTransactions.reduce(
       (acc, curr) => acc + (curr.type === "income" ? curr.amount : 0),
       0
     );
-    // Hitung total expenses dari filteredTransactions
     const expenses = filteredTransactions.reduce(
       (acc, curr) => acc + (curr.type === "expense" ? curr.amount : 0),
       0
     );
     return { income, expenses };
-  }, [selectedTagFilter, filteredTransactions]); // Hitung ulang jika filter atau daftar transaksi terfilter berubah
+  }, [selectedTagFilter, filteredTransactions]);
 
-  /**
-   * Handler untuk perubahan pilihan filter tag.
-   * @param e Event perubahan dari select element.
-   */
   const handleTagFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedTagFilter(e.target.value || null); // Set state filter, gunakan null jika memilih "All Tags" (value="")
+    setSelectedTagFilter(e.target.value || null);
   };
 
-  // Render JSX komponen
+  const renderMessages = () => (
+    <>
+      {error && (
+        <p className="error-message app-error" aria-live="assertive">
+          {error}
+        </p>
+      )}
+      {successMessage && (
+        <p className="success-message app-success" aria-live="assertive">
+          {successMessage}
+        </p>
+      )}
+    </>
+  );
+
   return (
     <div className="app">
-      {/* Tampilkan form Login/Register jika belum login */}
       {!isLoggedIn ? (
         <div className="auth-container">
-          {/* Tampilkan pesan error jika ada */}
-          {error && <p className="error-message auth-error">{error}</p>}
-          {/* Tampilkan indikator loading jika sedang proses auth */}
+          {renderMessages()}
           {isLoading && <p className="loading-indicator">Loading...</p>}
-          {/* Tampilkan komponen Register atau Login berdasarkan state showRegister */}
           {showRegister ? (
             <Register
-              onRegister={handleRegister} // Prop untuk fungsi register
+              onRegister={handleRegister}
               onSwitchToLogin={() => {
-                // Prop untuk beralih ke login
                 setShowRegister(false);
-                setError(null); // Hapus error saat beralih form
+                clearMessages();
               }}
             />
           ) : (
             <Login
-              onLogin={handleLogin} // Prop untuk fungsi login
+              onLogin={handleLogin}
               onSwitchToRegister={() => {
-                // Prop untuk beralih ke register
                 setShowRegister(true);
-                setError(null); // Hapus error saat beralih form
+                clearMessages();
               }}
             />
           )}
         </div>
       ) : (
-        // Tampilkan UI utama aplikasi jika sudah login
         <>
           <header className="header">
-            <h1>Money Tracker</h1>
+            <h1>Personalized Money Tracker</h1>
             <div className="controls">
-              {/* Indikator status koneksi */}
               <div
                 className={`connection-status ${
                   isOnline ? "online" : "offline"
                 }`}
               >
                 {isOnline ? "Online" : "Offline"}
+                {isSyncing && isOnline && " (Syncing...)"}
               </div>
-              {/* Tombol ganti tema */}
               <button
                 className="theme-toggle"
                 onClick={toggleTheme}
@@ -713,23 +769,19 @@ function App() {
               >
                 {theme === "light" ? "🌙 Dark" : "☀️ Light"}
               </button>
-              {/* Tombol logout */}
               <button
                 className="logout-button"
                 onClick={handleLogout}
-                disabled={isLoading} // Nonaktifkan jika sedang loading
+                disabled={isLoading}
               >
                 Logout
               </button>
             </div>
           </header>
-          {/* Tampilkan pesan error aplikasi jika ada */}
-          {error && <p className="error-message app-error">{error}</p>}
+          {renderMessages()}
           <main className="main-content">
-            {/* Bagian Form Tambah/Edit Transaksi */}
             <section className="form-container">
               <h2 id="form-title">
-                {/* Judul form dinamis berdasarkan mode edit */}
                 {editingTransactionId
                   ? "Edit Transaction"
                   : "Add New Transaction"}
@@ -737,23 +789,22 @@ function App() {
               <form
                 className="form"
                 onSubmit={(e) => {
-                  e.preventDefault(); // Cegah submit default form
-                  handleAddOrUpdateTransaction(); // Panggil fungsi tambah/update
+                  e.preventDefault();
+                  handleAddOrUpdateTransaction();
                 }}
-                aria-labelledby="form-title" // Aksesibilitas: hubungkan form dengan judulnya
+                aria-labelledby="form-title"
               >
-                {/* Baris pertama form: Type dan Amount */}
                 <div className="form-row">
                   <div className="form-group">
                     <label htmlFor="type">Type:</label>
                     <select
                       id="type"
                       value={type}
-                      onChange={
-                        (e) => setType(e.target.value as "income" | "expense") // Update state type
+                      onChange={(e) =>
+                        setType(e.target.value as "income" | "expense")
                       }
-                      disabled={isLoading} // Nonaktifkan jika loading
-                      required // Wajib diisi
+                      disabled={isLoading}
+                      required
                     >
                       <option value="income">Income</option>
                       <option value="expense">Expense</option>
@@ -763,18 +814,17 @@ function App() {
                     <label htmlFor="amount">Amount:</label>
                     <input
                       id="amount"
-                      type="text" // Gunakan text agar bisa diformat
-                      inputMode="numeric" // Hint keyboard numeric di mobile
+                      type="text"
+                      inputMode="numeric"
                       value={amount}
-                      onChange={handleAmountChange} // Gunakan handler khusus
+                      onChange={handleAmountChange}
                       placeholder="e.g., 50.000"
-                      disabled={isLoading} // Nonaktifkan jika loading
-                      required // Wajib diisi
-                      aria-required="true" // Aksesibilitas
+                      disabled={isLoading}
+                      required
+                      aria-required="true"
                     />
                   </div>
                 </div>
-                {/* Baris kedua form: Title */}
                 <div className="form-row">
                   <div className="form-group full-width">
                     <label htmlFor="title">Title (Optional):</label>
@@ -782,28 +832,26 @@ function App() {
                       id="title"
                       type="text"
                       value={title}
-                      onChange={(e) => setTitle(e.target.value)} // Update state title
+                      onChange={(e) => setTitle(e.target.value)}
                       placeholder="e.g., Salary, Groceries"
-                      maxLength={100} // Batas karakter
-                      disabled={isLoading} // Nonaktifkan jika loading
+                      maxLength={100}
+                      disabled={isLoading}
                     />
                   </div>
                 </div>
-                {/* Baris ketiga form: Description */}
                 <div className="form-row">
                   <div className="form-group full-width">
                     <label htmlFor="description">Description (Optional):</label>
                     <textarea
                       id="description"
                       value={description}
-                      onChange={(e) => setDescription(e.target.value)} // Update state description
+                      onChange={(e) => setDescription(e.target.value)}
                       placeholder="e.g., Monthly pay, Weekly shop"
-                      rows={3} // Tinggi textarea
-                      disabled={isLoading} // Nonaktifkan jika loading
+                      rows={3}
+                      disabled={isLoading}
                     ></textarea>
                   </div>
                 </div>
-                {/* Baris keempat form: Tags */}
                 <div className="form-row">
                   <div className="form-group full-width">
                     <label htmlFor="tags">
@@ -813,35 +861,31 @@ function App() {
                       id="tags"
                       type="text"
                       value={tags}
-                      onChange={(e) => setTags(e.target.value)} // Update state tags
+                      onChange={(e) => setTags(e.target.value)}
                       placeholder="e.g., work, food, bills"
-                      maxLength={255} // Batas karakter
-                      disabled={isLoading} // Nonaktifkan jika loading
+                      maxLength={255}
+                      disabled={isLoading}
                     />
                   </div>
                 </div>
-                {/* Tombol Aksi Form */}
                 <div className="form-actions">
                   <button
                     type="submit"
                     className="button"
-                    // Nonaktifkan jika loading atau offline
-                    disabled={isLoading || !isOnline}
+                    disabled={isLoading} // Button is enabled offline, logic handles behavior
                   >
-                    {/* Teks tombol dinamis */}
                     {isLoading
                       ? "Saving..."
                       : editingTransactionId
                       ? "Update Transaction"
                       : "Add Transaction"}
                   </button>
-                  {/* Tampilkan tombol Cancel Edit hanya jika sedang mode edit */}
                   {editingTransactionId && (
                     <button
-                      type="button" // Bukan submit
+                      type="button"
                       className="button secondary"
-                      onClick={clearForm} // Panggil fungsi clear form
-                      disabled={isLoading} // Nonaktifkan jika loading
+                      onClick={clearForm}
+                      disabled={isLoading}
                     >
                       Cancel Edit
                     </button>
@@ -850,44 +894,37 @@ function App() {
               </form>
             </section>
 
-            {/* Bagian Ringkasan Keseluruhan */}
             <section
               className="summary-container"
-              aria-label="Overall Financial Summary" // Aksesibilitas
+              aria-label="Overall Financial Summary"
             >
-              <h3 className={headingClassName}>Overall Summary</h3>
+              <h3 className="summary-heading">Overall Summary</h3>
               <p>
                 <strong>Income:</strong>{" "}
-                {/* Tampilkan total income yang diformat */}
                 <span>Rp{formatNumber(totalIncome)}</span>
               </p>
               <p>
                 <strong>Expenses:</strong>{" "}
-                {/* Tampilkan total expenses yang diformat */}
                 <span>Rp{formatNumber(totalExpenses)}</span>
               </p>
               <p>
                 <strong>Balance:</strong>{" "}
-                {/* Tampilkan total balance yang diformat */}
                 <span>Rp{formatNumber(totalBalance)}</span>
               </p>
             </section>
 
-            {/* Bagian Daftar Riwayat Transaksi */}
             <section className="transactions">
               <h2>History</h2>
-              {/* Tampilkan filter tag jika ada tag unik */}
               {uniqueTags.length > 0 && (
                 <div className="tag-filter-container">
                   <label htmlFor="tag-filter">Filter by Tag:</label>
                   <select
                     id="tag-filter"
-                    value={selectedTagFilter ?? ""} // Gunakan string kosong jika filter null
-                    onChange={handleTagFilterChange} // Handler perubahan filter
-                    disabled={isLoading} // Nonaktifkan jika loading
+                    value={selectedTagFilter ?? ""}
+                    onChange={handleTagFilterChange}
+                    disabled={isLoading}
                   >
-                    <option value="">All Tags</option> {/* Opsi default */}
-                    {/* Render opsi untuk setiap tag unik */}
+                    <option value="">All Tags</option>
                     {uniqueTags.map((tag) => (
                       <option key={tag} value={tag}>
                         {tag}
@@ -896,123 +933,101 @@ function App() {
                   </select>
                 </div>
               )}
-              {/* Tampilkan ringkasan terfilter jika ada tag yang dipilih */}
               {selectedTagFilter && (
                 <div className="filtered-summary" aria-live="polite">
-                  {" "}
-                  {/* Aksesibilitas: umumkan perubahan */}
                   <h3>Summary for Tag: "{selectedTagFilter}"</h3>
                   <div className="filtered-summary-details">
                     <p>
                       <strong>Income:</strong> Rp
-                      {/* Tampilkan income terfilter */}
                       {formatNumber(filteredSummary.income)}
                     </p>
                     <p>
                       <strong>Expenses:</strong> Rp
-                      {/* Tampilkan expenses terfilter */}
                       {formatNumber(filteredSummary.expenses)}
                     </p>
                   </div>
                 </div>
               )}
-              {/* Tampilkan indikator loading jika sedang memuat dan belum ada transaksi */}
               {isLoading && transactions.length === 0 && (
                 <p className="loading-indicator">Loading history...</p>
               )}
-              {/* Tampilkan pesan jika tidak ada transaksi (baik karena kosong atau filter) */}
               {!isLoading && filteredTransactions.length === 0 && (
                 <p className="transaction-item empty">
                   {selectedTagFilter
-                    ? `No transactions found with the tag "${selectedTagFilter}".` // Pesan jika filter aktif
+                    ? `No transactions found with the tag "${selectedTagFilter}".`
                     : transactions.length === 0
-                    ? "No transactions recorded yet." // Pesan jika memang belum ada data
-                    : "No transactions match the current filter."}{" "}
-                  {/* Pesan fallback jika filter aktif tapi data asli ada */}
+                    ? "No transactions recorded yet."
+                    : "No transactions match the current filter."}
                 </p>
               )}
-              {/* Render daftar transaksi jika ada transaksi terfilter */}
               {filteredTransactions.length > 0 && (
                 <ul
                   aria-label={`Transaction History List${
-                    // Label dinamis untuk aksesibilitas
                     selectedTagFilter
                       ? ` (filtered by tag: ${selectedTagFilter})`
                       : ""
                   }`}
                 >
-                  {/* Map setiap transaksi terfilter ke elemen list item */}
                   {filteredTransactions.map((transaction) => (
                     <li
-                      key={transaction.id} // Kunci unik untuk list item
-                      className={`transaction-item ${transaction.type}`} // Kelas CSS berdasarkan tipe
+                      key={transaction.id} // Offline IDs might be temporary (e.g. timestamp)
+                      className={`transaction-item ${transaction.type}`}
                     >
-                      {/* Detail transaksi */}
                       <div className="transaction-details">
                         <span className="transaction-title">
                           <span>
-                            {/* Tampilkan judul atau tipe jika judul kosong */}
                             {transaction.title ||
                               transaction.type.charAt(0).toUpperCase() +
                                 transaction.type.slice(1)}
                           </span>
                           <span className="transaction-amount">
-                            {/* Tanda + atau - berdasarkan tipe dan jumlah yang diformat */}
                             {transaction.type === "income" ? "+" : "-"}Rp
                             {formatNumber(transaction.amount)}
                           </span>
                         </span>
-                        {/* Tampilkan deskripsi jika ada */}
                         {transaction.description && (
                           <p className="transaction-description">
                             {transaction.description}
                           </p>
                         )}
-                        {/* Tampilkan tag jika ada */}
                         {transaction.tags && (
                           <div className="transaction-tags" aria-label="Tags">
                             {transaction.tags
                               .split(",")
-                              .map((tag) => tag.trim()) // Proses tags
+                              .map((tag) => tag.trim())
                               .filter(Boolean)
                               .map((tag, index) => (
                                 <span key={index} className="tag">
-                                  {" "}
-                                  {/* Render setiap tag */}
                                   {tag}
                                 </span>
                               ))}
                           </div>
                         )}
                       </div>
-                      {/* Tombol aksi untuk setiap transaksi */}
                       <div className="transaction-actions">
                         <button
                           className="edit-btn"
-                          onClick={() => handleEditTransaction(transaction)} // Panggil handler edit
-                          // Nonaktifkan jika loading atau jika transaksi ini sedang diedit
+                          onClick={() => handleEditTransaction(transaction)}
                           disabled={
                             isLoading || editingTransactionId === transaction.id
                           }
-                          // Label aksesibilitas yang deskriptif
                           aria-label={`Edit transaction: ${
                             transaction.title || transaction.type
                           } for Rp${formatNumber(transaction.amount)}`}
                         >
-                          ✏️ {/* Ikon edit */}
+                          ✏️
                         </button>
                         <button
                           className="delete-btn"
-                          onClick={
-                            () => handleDeleteTransaction(transaction.id) // Panggil handler delete
+                          onClick={() =>
+                            handleDeleteTransaction(transaction.id)
                           }
-                          disabled={isLoading} // Nonaktifkan jika loading
-                          // Label aksesibilitas yang deskriptif
+                          disabled={isLoading}
                           aria-label={`Delete transaction: ${
                             transaction.title || transaction.type
                           } for Rp${formatNumber(transaction.amount)}`}
                         >
-                          🗑️ {/* Ikon delete */}
+                          🗑️
                         </button>
                       </div>
                     </li>
@@ -1027,5 +1042,4 @@ function App() {
   );
 }
 
-// Ekspor komponen App sebagai default
 export default App;

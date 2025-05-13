@@ -1,4 +1,4 @@
-/* index.css */
+/* index.css (Dengan perbaikan warna dark mode) */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
 
 /* Basic Reset & Box Sizing */
@@ -30,7 +30,7 @@
   --income-color: #28a745; /* Keep vibrant */
   --expense-color: #dc3545; /* Keep vibrant */
   --error-color: #e53e3e; /* Consistent error red */
-  --link-color: var(--primary-color);
+  --link-color: var(--primary-color); /* Link uses primary color by default */
 
   /* Components */
   --tag-background: #e9ecef;
@@ -59,21 +59,26 @@
   --border-color: #444444; /* Darker border */
   --input-border: #555555;
   --input-background: #3a3a3a;
-  --button-text-color: #ffffff;
+  --button-text-color: #ffffff; /* Generally white text on dark buttons */
 
   /* Accents & Status */
-  --primary-color: #000000; /* Brighter blue for dark mode */
-  --primary-hover-color: #4090e0;
+  /* IMPROVEMENT: Use a visible primary color (e.g., brighter blue) */
+  --primary-color: #58a6ff; /* Brighter blue for dark mode */
+  --primary-hover-color: #4090e0; /* Slightly darker bright blue */
   --secondary-color: #768390;
   --secondary-hover-color: #8d98a4;
   --income-color: #3fb950; /* Brighter green */
   --expense-color: #f85149; /* Brighter red */
   --error-color: #f85149;
-  --link-color: var(--primary-color);
+  /* IMPROVEMENT: Ensure link color is visible */
+  --link-color: var(
+    --primary-color
+  ); /* Link should use the visible primary color */
 
   /* Components */
   --tag-background: #3a3a3a;
   --tag-text: #b0b0b0;
+  /* IMPROVEMENT: Adjusted focus ring for new primary color */
   --focus-ring-color: rgba(88, 166, 255, 0.3);
   --shadow-color: rgba(0, 0, 0, 0.3); /* More visible shadow on dark */
   --shadow-color-medium: rgba(0, 0, 0, 0.4);
@@ -94,8 +99,9 @@ body {
   background-color: var(--background-color);
   color: var(--text-color);
   line-height: 1.6; /* Improved readability */
-  height: 100%;
-  overflow: auto; /* Prevent body scroll, manage within #root */
+  /* height: 100%; */ /* Let content determine height or manage via #root */
+  /* overflow: auto; */ /* Manage overflow within #root or specific containers */
+  min-height: 100vh; /* Ensure body takes at least full viewport height */
   transition: background-color var(--transition-speed) ease,
     color var(--transition-speed) ease;
   -webkit-font-smoothing: antialiased;
@@ -104,7 +110,7 @@ body {
 }
 
 #root {
-  height: 100%;
+  min-height: 100vh; /* Ensure root also fills viewport */
   display: flex; /* Needed for flex structure in App.css */
   flex-direction: column;
 }
@@ -203,6 +209,7 @@ h6 {
   margin-bottom: 1rem; /* Consistent heading margin */
   font-weight: 600; /* Semi-bold */
   line-height: 1.3;
+  color: var(--text-color); /* Ensure headings also use theme text color */
 }
 
 h1 {
@@ -221,6 +228,7 @@ h4 {
 p {
   margin-bottom: 0.75rem; /* Consistent paragraph margin */
   line-height: 1.6;
+  color: var(--text-color); /* Ensure paragraphs use theme text color */
 }
 
 a {
